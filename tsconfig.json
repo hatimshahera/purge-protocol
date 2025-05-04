@@ -1,0 +1,20 @@
+{
+    "compilerOptions": {
+      "target": "ES2020",                      // Modern JS (includes, optional chaining etc)
+      "module": "CommonJS",                    // Node.js compatible modules
+      "lib": ["ES2020", "DOM"],                // Supports all modern JS + Socket.IO emits
+      "allowJs": false,                        // Pure TS (no JS files)
+      "checkJs": false,
+      "strict": true,                          // Enable strict type checking (recommended)
+      "esModuleInterop": true,                 // Allow import x from "y" syntax
+      "skipLibCheck": true,                    // Skip node_modules checking (faster builds)
+      "forceConsistentCasingInFileNames": true,
+      "outDir": "./dist",                      // Optional: build output
+      "rootDir": "./src",                      // Optional: source directory
+      "moduleResolution": "node",              // Recommended for Node.js projects
+      "resolveJsonModule": true                // If needed later for config files
+    },
+    "include": ["src"],
+    "exclude": ["node_modules"]
+  }
+  
