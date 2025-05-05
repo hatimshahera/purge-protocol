@@ -1,5 +1,5 @@
 // 📁 src/server/game/state.ts
-// Game state (deck, middle card, players, turn order, round count)
+// Game state (deck, middle card, players, turn order, round count, hands)
 
 import { Card } from "./card";
 import { Player } from "./player";
@@ -12,6 +12,9 @@ export class GameState {
     roundNumber: number;
     purgeCalledBy: Player | null;
 
+    // Store player hands
+    private hands: Map<string, Card[]> = new Map();
+
     constructor(players: Player[], deck: Card[]) {
         this.players = players;
         this.deck = deck;
@@ -19,6 +22,17 @@ export class GameState {
         this.currentPlayerIndex = 0; // Start with first player
         this.roundNumber = 1;
         this.purgeCalledBy = null;
+
+        this.hands = new Map();
+
+        // Deal 4 cards to each player
+        for (const player of players) {
+            const hand = deck.splice(0, 4);
+            this.hands.set(player.id, hand);
+        }
+
+        // Set middle card
+        this.middleCard = deck.shift() ?? null;
     }
 
     /**
@@ -77,5 +91,12 @@ export class GameState {
      */
     isPurgePhase(): boolean {
         return this.purgeCalledBy !== null;
+    }
+
+    /**
+     * Get player hands (for syncing to frontend)
+     */
+    public getHands() {
+        return this.hands;
     }
 }

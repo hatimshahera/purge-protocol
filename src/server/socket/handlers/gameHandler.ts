@@ -1,5 +1,5 @@
 // 📁 src/server/socket/handlers/gameHandler.ts
-// Advanced game handling (turn order, timer, purge phase) (SAFE PATCHED VERSION + ARGUMENT TYPING FIXES)
+// Advanced game handling (turn order, timer, purge phase) (PATCH 5 → FIX end_turn logic → notify next player properly)
 
 import { Server, Socket } from "socket.io";
 import { rooms } from "../roomStore";
@@ -17,6 +17,10 @@ export function registerGameHandlers(io: Server, socket: Socket) {
         if (!data || !data.engine) return;
 
         const currentPlayer = data.engine.state.getCurrentPlayer();
+
+        // ✅ Only emit your_turn to current player
+        io.to(currentPlayer.id).emit("your_turn", {});
+
         io.to(roomId).emit("next_player", currentPlayer.id);
 
         // Start timer
@@ -46,7 +50,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     });
 
     // Swap or drop card
-    socket.on("swap_or_drop", ({ roomId, handIndex, drawnCard }: { roomId: string; handIndex: number | null; drawnCard: Card }) => {
+    socket.on("swap_or_drop", ({ roomId }: { roomId: string }, handIndex, drawnCard) => {
         const data = rooms.get(roomId);
         if (!data || !data.engine) return;
 
@@ -58,7 +62,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     });
 
     // Play matching card
-    socket.on("play_matching_card", ({ roomId, handIndex }: { roomId: string; handIndex: number }) => {
+    socket.on("play_matching_card", ({ roomId }: { roomId: string }, handIndex) => {
         const data = rooms.get(roomId);
         if (!data || !data.engine) return;
 
@@ -71,7 +75,7 @@ export function registerGameHandlers(io: Server, socket: Socket) {
     });
 
     // Use themed card ability
-    socket.on("use_ability", ({ roomId, card, targetPlayerId, handIndex }: { roomId: string; card: Card; targetPlayerId?: string; handIndex?: number }) => {
+    socket.on("use_ability", ({ roomId }: { roomId: string }, card, targetPlayerId, handIndex) => {
         const data = rooms.get(roomId);
         if (!data || !data.engine) return;
 
@@ -92,6 +96,11 @@ export function registerGameHandlers(io: Server, socket: Socket) {
         const player = data.room.getPlayer(socket.id);
         if (!player) return;
 
+        if (!data.engine.state.canCallPurge()) {
+            socket.emit("purge_failed", "Purge not allowed yet");
+            return;
+        }
+
         data.engine.callPurge(player);
         io.to(roomId).emit("purge_called", player.id);
     });
@@ -103,7 +112,21 @@ export function registerGameHandlers(io: Server, socket: Socket) {
 
         data.timer?.clear();
         data.engine.nextTurn();
-        startPlayerTurn(roomId);
+
+        // ✅ FIXED → notify room and current player properly after turn ends
+        const nextPlayer = data.engine.state.getCurrentPlayer();
+        io.to(roomId).emit("next_player", nextPlayer.id);
+        io.to(nextPlayer.id).emit("your_turn", {});
+
+        // Restart timer for next player
+        data.timer = new TurnTimer(60, () => {
+            console.log("Player turn timeout");
+            io.to(roomId).emit("player_timeout", nextPlayer.id);
+            data.engine!.nextTurn();
+            startPlayerTurn(roomId);
+        });
+
+        data.timer.start();
     });
 
     // Auto start turn on game start (join handler should call this)

@@ -1,5 +1,5 @@
 // 📁 src/server/socket/handlers/roomHandler.ts
-// Handles room actions (join, ready, start game) (SAFE PATCHED VERSION + ARGUMENT TYPING FIXES)
+// Handles room actions (join, ready, start game) (SAFE PATCHED VERSION + PATCH 2 → FIXED GAME START BROADCAST)
 
 import { Server, Socket } from "socket.io";
 import { Room } from "../../models/room";
@@ -13,12 +13,15 @@ export function registerRoomHandlers(io: Server, socket: Socket) {
     // Join room
     socket.on("join_room", ({ roomId, playerName }: { roomId: string; playerName: string }) => {
         let data = rooms.get(roomId);
+
+        // ✅ Only create the room (empty) if not exists, no player auto creation
         if (!data) {
             const newRoom = new Room(roomId, socket.id);
             rooms.set(roomId, { room: newRoom });
             data = rooms.get(roomId)!;
         }
 
+        // ✅ Only here when player joins → create Player
         const player = new Player(socket.id, playerName);
         const success = data.room.addPlayer(player);
 
@@ -49,14 +52,29 @@ export function registerRoomHandlers(io: Server, socket: Socket) {
 
             data.engine = engine;
 
+            // ✅ FIXED → Emit to entire room → reliable broadcast
             io.to(roomId).emit("game_started", {
-                players: players.map(p => ({ id: p.id, name: p.name })),
+                players: players.map((p: any) => ({ id: p.id, name: p.name })),
                 firstPlayerId: state.getCurrentPlayer().id,
                 deckSize: deck.length
             });
 
+            // Send middle card to all players
+            io.to(roomId).emit("middle_card_updated", state.middleCard);
+
+            // Send starting hand to each player individually (using new getter)
+            const hands = state.getHands();
+            for (const player of players) {
+                const hand = hands.get(player.id) ?? [];
+                io.to(player.id).emit("card_drawn", hand);
+            }
+
             // Automatically start the first turn
             io.to(roomId).emit("start_turns", { roomId });
+
+            // Notify first player to begin their turn immediately → ONLY to that player
+            const currentPlayer = state.getCurrentPlayer();
+            io.to(currentPlayer.id).emit("your_turn", {});
         }
     });
 
